@@ -1,0 +1,94 @@
+from selenium import webdriver
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+import requests
+import csv
+
+# Function to scrape the heading and status from a specific mission website
+def scrape_mission_details(url):
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            # Parse the HTML content of the page using BeautifulSoup
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            # Find the heading if present
+            heading_element = soup.find('h1', class_='page-heading-md display-block width-full margin-0')
+            heading = heading_element.text.strip() if heading_element else "Heading not found"
+
+            # Find the mission status if present
+            status_element = soup.find('div', class_='label tag tag-mission mission-status-spacer')
+            status = status_element.find('span').text.strip() if status_element else "Status not found"
+
+            return heading, status
+    except requests.exceptions.RequestException as e:
+        print("Error:", e)
+    return "Heading not found", "Status not found"
+
+# Function to scrape all mission headings and statuses from the NASA missions page
+def scrape_nasa_mission_headings(urls):
+    all_headings_and_statuses = []
+
+    # Iterate over each URL
+    for url in urls:
+        # Set up the ChromeDriver (ensure chromedriver is installed and in your PATH)
+        driver = webdriver.Chrome()
+        driver.get(url)
+        page_source = driver.page_source
+        driver.quit()
+
+        # Parse the HTML content of the page using BeautifulSoup
+        soup = BeautifulSoup(page_source, 'html.parser')
+
+        # Find the div with id "mission-terms-results-list"
+        mission_results_div = soup.find('div', {'id': 'mission-terms-results-list'})
+
+        # Check if the div is found
+        if mission_results_div:
+            # Find all anchor tags (links) within the div and visit each link
+            for link in mission_results_div.find_all('a'):
+                href = link.get('href')
+                if href:
+                    # Construct the absolute URL if the href is relative
+                    absolute_url = urljoin(url, href)
+                    print("Visiting:", absolute_url)
+
+                    # Get the heading and status from the mission website
+                    heading, status = scrape_mission_details(absolute_url)
+                    print(f"Heading found: {heading}, Status found: {status}")
+
+                    # Append heading and status to the list
+                    all_headings_and_statuses.append((heading, status))
+        else:
+            print("Div with id 'mission-terms-results-list' not found on the page.")
+
+    return all_headings_and_statuses
+
+# Function to save the data to a CSV file
+def save_to_csv(data, filename):
+    with open(filename, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Heading', 'Status'])  # Write the header
+        writer.writerows(data)  # Write the data
+
+# URLs to scrape
+urls = [
+    "https://www.nasa.gov/missions/?terms=10828%2C10873%2C12882",
+    "https://www.nasa.gov/missions/?terms=10828%2C10873%2C12882&page=2",
+    "https://www.nasa.gov/missions/?terms=10828%2C10873%2C12882&page=3",
+    "https://www.nasa.gov/missions/?terms=10828%2C10873%2C12882&page=4"
+]
+
+# Scrape mission headings and statuses
+headings_and_statuses = scrape_nasa_mission_headings(urls)
+
+# Print the scraped headings and statuses
+print("\nScraped Mission Headings and Statuses:\n")
+for heading, status in headings_and_statuses:
+    print(f"Heading: {heading}")
+    print(f"Status: {status}\n")
+
+# Save to CSV
+csv_filename = 'nasa_mission_data.csv'
+save_to_csv(headings_and_statuses, csv_filename)
+print(f"\nData saved to {csv_filename}.")
